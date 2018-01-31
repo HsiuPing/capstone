@@ -25,12 +25,16 @@ class Dataclean:
         Returns:
             :obj:'DataFrame from pandas'
         Raise:
-            ValueError if the file is not successfully loaded        
+            ValueError if the file is not successfully loaded
         """
         try:
-            df_raw = pd.read_csv(filename, sep='\t', skiprows=[1, 24, 1], header=25, low_memory=False)
+            # FR: keep line length <80 characters:
+            df_raw = pd.read_csv(filename, sep='\t', skiprows=[1, 24, 1],
+                                 header=25, low_memory=False)
             return df_raw
         except:
+            # FR: don't use bare except, come up with more specific errors
+            #     e.g., FileNotFoundError or maybe some of the pandas errors
             raise ValueError('file loading error, or not found!')
 
     @staticmethod
@@ -46,7 +50,7 @@ class Dataclean:
         Raises:
             ValueError if the column(s) is not found in the dataset
             ValueError if the selfloop is not 'y' or 'n'
-            ValueError if the graph is not successfully created   
+            ValueError if the graph is not successfully created
         """
 
         if (colname_a not in dataset) or (colname_b not in dataset):
@@ -58,6 +62,8 @@ class Dataclean:
                 nx_map = nx.from_pandas_edgelist(dataset, colname_a, colname_b)
             elif selfloop == 'n':
                 nx_map = nx.from_pandas_edgelist(dataset, colname_a, colname_b)
+                # FR: one suggestion to improve readability: explicitly label
+                #     source=colname_a, target=colname_b
                 nx_map.remove_edges_from(nx_map.selfloop_edges())
             return nx_map
 
@@ -70,18 +76,30 @@ class Dataclean:
         Returns:
             :obj:'list': a list of nodes
         Raise:
-            ValueError if the file is not successfully loaded        
+            ValueError if the file is not successfully loaded
         """
 
         try:
             with open(filename, 'r') as file:
                 datas = csv.reader(file, delimiter="\t")
+                # FR: maybe don't use 'file' since that's the overall name of
+                #     the object class (ie a `file` object)
+                # FR: why are you using csv.reader here but pandas above? Maybe
+                #     stick with one for consistency. Also not
+                #     sure which file  you are reading in from the directory:
+                #     it looks like the list of nodes is just a single column?
+                # FR: An interesting error check could be if genes were 
+                #     converted to dates on the input, e.g., there is Sept-8
                 data = []
                 for row in datas:
                     data.append(row)
                 data = [item for sublist in data for item in sublist]
+                # FR: don't quite follow the logic on why are you flattening a
+                #     list of lists. Also why not use the name `nodelist`
+                #     instead of `data`
             return data
         except:
+            # FR: again, avoid bare excepts and instead list specific errors
             raise ValueError('file loading error, or not found!')
 
     @staticmethod
@@ -94,7 +112,7 @@ class Dataclean:
         Returns:
             :obj:'Graph from networkx': the subgraph by nodes in nodelist
         Raise:
-            ValueError if the file is not successfully loaded        
+            ValueError if the file is not successfully loaded
         """
         graphnode = list(graph.nodes())
         nodesingraph = list(set(graphnode) & set(nodelist))
@@ -104,7 +122,10 @@ class Dataclean:
         print('Following are the nodes not in the graph:\n', nodesnotingraph)
 
         nx_subg = graph.subgraph(nodesingraph)
+        # FR: is this subgraph method different from the one in the Subgraph 
+        #     class below? If they are the same, then args are incorrect
         return nx_subg
+
 
 class Subgraph:
     """ This class contains the methods for generating subnetworks
@@ -134,6 +155,10 @@ class Subgraph:
                 nx_subg = graph.subgraph(rdnodes)
                 return nx_subg
             except:
+                # FR:  again, potentially avoid bare excepts (this suppresses
+                #      the caught error message. Alternatively use raise without
+                #      arguments like here: 
+                #      https://stackoverflow.com/a/25002034/5792088
                 raise ValueError('the subgraph is not successfully created')
 
     @staticmethod
@@ -166,6 +191,7 @@ class Subgraph:
                     for node in dic_adjlist[temp_k]:
                         temp_list.append(node)
 
+                    # FR: why are you using both of these. Shouldn't 1 suffice?
                     temp_list = [x for x in temp_list if x != temp_k]
                     temp_list = [x for x in temp_list if x not in rdnodes]
 
@@ -251,6 +277,7 @@ class Parameter:
             :obj:'int'     
         """
         value = len(list(graph.nodes()))
+        # FR: great method by why not use it above?
         return value
 
     @staticmethod
