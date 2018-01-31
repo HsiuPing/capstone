@@ -12,6 +12,8 @@ from collections import Counter
 import networkx as nx
 
 
+# APG: Standards compliance, Robustness: Python 3 standard declares classes with
+#   class ClassName(object), to make it explicit that they derive from object
 class Dataclean:
     """ This class contains the methods for dealing with the interaction datasets from different databases and input
     """
@@ -25,12 +27,20 @@ class Dataclean:
         Returns:
             :obj:'DataFrame from pandas'
         Raise:
-            ValueError if the file is not successfully loaded        
+            ValueError if the file is not successfully loaded
         """
         try:
             df_raw = pd.read_csv(filename, sep='\t', skiprows=[1, 24, 1], header=25, low_memory=False)
             return df_raw
         except:
+            # APG: Robustness: include more information in the error message, such as filename, type of error
+            # in fact, since pandas has robust error reporting, it would be easiest to not catch the
+            # exception, and simply let the pandas error be raised in the calling code
+            # alternatively, you could reraise the pandas error
+            # try
+            #    pd.read_csv()
+            # except Exception as e:
+            #    raise ValueError("unable to read file" + e)
             raise ValueError('file loading error, or not found!')
 
     @staticmethod
@@ -46,8 +56,10 @@ class Dataclean:
         Raises:
             ValueError if the column(s) is not found in the dataset
             ValueError if the selfloop is not 'y' or 'n'
-            ValueError if the graph is not successfully created   
+            ValueError if the graph is not successfully created
         """
+        # APG: Documentation: to indicate an optional argument use 'optional'; e.g.:
+        # selfloop (:obj: str, optional):
 
         if (colname_a not in dataset) or (colname_b not in dataset):
             raise ValueError('the column(s) is not found in the dataset')
@@ -70,8 +82,10 @@ class Dataclean:
         Returns:
             :obj:'list': a list of nodes
         Raise:
-            ValueError if the file is not successfully loaded        
+            ValueError if the file is not successfully loaded
         """
+        # APG: Documentation: small point: docstrings typically put a blank line between each section
+        # e.g., see 'def fetch_bigtable_rows' example in https://google.github.io/styleguide/pyguide.html
 
         try:
             with open(filename, 'r') as file:
@@ -82,6 +96,7 @@ class Dataclean:
                 data = [item for sublist in data for item in sublist]
             return data
         except:
+            # APG: Robustness: basically same Robustness as above
             raise ValueError('file loading error, or not found!')
 
     @staticmethod
@@ -94,11 +109,14 @@ class Dataclean:
         Returns:
             :obj:'Graph from networkx': the subgraph by nodes in nodelist
         Raise:
-            ValueError if the file is not successfully loaded        
+            ValueError if the file is not successfully loaded
         """
         graphnode = list(graph.nodes())
         nodesingraph = list(set(graphnode) & set(nodelist))
         nodesnotingraph = [item for item in nodelist if item not in nodesingraph]
+        # APG: Readability: names like 'nodesnotingraph' are hard to read; use 'nodes_not_in_graph' instead
+        # these are called 'lower_with_under' names; see https://google.github.io/styleguide/pyguide.html again
+        # you can improve many names with this concept
         print(len(nodesingraph), 'nodes in your node list are in the graph.')
         print(len(nodesnotingraph), 'nodes are not in the graph.')
         print('Following are the nodes not in the graph:\n', nodesnotingraph)
@@ -120,11 +138,13 @@ class Subgraph:
             :obj:'Graph from networkx': the undirected subgraph
         Raises:
             ValueError if the size is not the integer between 2 and the size of the graph
-            ValueError if the subgraph is not successfully created   
+            ValueError if the subgraph is not successfully created
         """
 
         if not float(size).is_integer():
             raise ValueError('the size should be a integer')
+            # AGP: Robustness: could report the bad size with
+            #   ValueError("the size ({}) should be a integer".format(size))
         elif (size < 2) or (size > len(list(graph.nodes()))):
             raise ValueError('the size should be between 2 and the size of the graph')
         else:
@@ -134,6 +154,7 @@ class Subgraph:
                 nx_subg = graph.subgraph(rdnodes)
                 return nx_subg
             except:
+                # AGP: Robustness: needs more explanation, so user can solve the problem
                 raise ValueError('the subgraph is not successfully created')
 
     @staticmethod
@@ -146,14 +167,19 @@ class Subgraph:
             :obj:'Graph from networkx': the undirected linked subgraph
         Raises:
             ValueError if the size is not the integer between 2 and the size of the graph
-            ValueError if the subgraph is not successfully created   
+            ValueError if the subgraph is not successfully created
         """
 
+        # APG: Functionality: these tests should check whether size > len(graph.largest_connected_subgraph())
         if not float(size).is_integer():
             raise ValueError('the size should be a integer')
         elif (size < 2) or (size > len(list(graph.nodes()))):
             raise ValueError('the size should be between 2 and the size of the graph')
+
         else:
+            # APG: Functionality: it's not clear whether this algorithm is creating an UNBIASED
+            # random connected subgraph; first, we need to define the algorithm's goal
+            # it could be "choose a subgraph so all possible connected subgraphs are equally likely to be chosen"
             try:
                 dic_adjlist = nx.to_dict_of_lists(graph)
                 temp_k = random.choice(list(dic_adjlist))
@@ -175,6 +201,8 @@ class Subgraph:
                         temp_k = temp_v
                         i += 1
                     else:
+                        # APG: Functionality: since the while condition is i < size but i is being reset to 1
+                        # this algorithm might have a non-zero probability of being an infinite loop
                         i = 1
                         temp_k = random.choice(list(dic_adjlist))
                         temp_list = []
@@ -183,6 +211,7 @@ class Subgraph:
                 nx_subg = graph.subgraph(rdnodes)
                 return nx_subg
             except:
+                # APG: Robustness: same comment as above, plus does this method randomly fail?
                 raise ValueError('the subgraph is not successfully created')
 
     @staticmethod
@@ -198,7 +227,7 @@ class Subgraph:
         Raises:
             ValueError if the size is not the integer between 2 and the size of the graph
             ValueError if the number is not the integer larger than 1
-            ValueError if the subgraphs are not successfully created   
+            ValueError if the subgraphs are not successfully created
         """
 
         if not float(size).is_integer():
@@ -237,8 +266,10 @@ class Parameter:
         Args:
              (:obj: Graph from networkx)
         Returns:
-            :obj:'int'     
+            :obj:'int'
         """
+        # APG: Readability: simplify by using just one line:
+        # return len(list(graph.edges()))
         value = len(list(graph.edges()))
         return value
 
@@ -248,7 +279,7 @@ class Parameter:
         Args:
              graph (:obj: Graph from networkx)
         Returns:
-            :obj:'int'     
+            :obj:'int'
         """
         value = len(list(graph.nodes()))
         return value
@@ -259,19 +290,19 @@ class Parameter:
         Args:
              graph (:obj: Graph from networkx)
         Returns:
-            :obj:'Graph from networkx':    
+            :obj:'Graph from networkx':
         """
         maxsub = max(nx.connected_component_subgraphs(graph), key=len)
         return maxsub
 
     @staticmethod
     def parameterlist(graphs, function):
-        """ Return a list of values(or objects, based on the function) from each of multiple graphs 
+        """ Return a list of values(or objects, based on the function) from each of multiple graphs
         Args:
              graphs (:obj: list of Graph, Graph is an object from networkx)
              function (:any function that could return a property from the Graph)
         Returns:
-            :obj:'list of values(or objects, based on the function)':    
+            :obj:'list of values(or objects, based on the function)':
         """
         values = list(map(lambda i: function(i), graphs))
         return values
@@ -288,7 +319,7 @@ class Stats:
             population (:obj: list)
             data (:obj: float)
         Returns:
-            :obj:'float': the p-value of the data based on the population       
+            :obj:'float': the p-value of the data based on the population
         """
         popplusdata = population + [data]
         z = stats.zscore(popplusdata)
@@ -301,7 +332,7 @@ class Stats:
         Args:
             values (:obj: list)
         Returns:
-            :obj:'list of tuples': each tuple contains (value, the percentage of this value in the list)       
+            :obj:'list of tuples': each tuple contains (value, the percentage of this value in the list)
         """
         c = Counter(values)
         percent = sorted([(i, c[i] / len(values) * 100.0) for i in c])
@@ -314,7 +345,7 @@ class Stats:
             graphs (:obj: list of Graph, Graph is an object from networkx)
             show (:obj: str): 'y' to show the graph
         Returns:
-            :obj:'Graph from networkx': the largest graph in the graphs     
+            :obj:'Graph from networkx': the largest graph in the graphs
         """
         largest = max(graphs, key=len)
         print('The size of the largest graph is', len(list(largest.nodes())))
@@ -322,3 +353,7 @@ class Stats:
             nx.draw(largest, with_labels=True)
             plt.show()
         return largest
+
+# AGP: Readability: I note that all your methods are static, which means that these classes
+# store no state; typically one would want to combine state with the methods that operate on it
+# in abstract data types (ADTs)
