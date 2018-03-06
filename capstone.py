@@ -316,6 +316,15 @@ class Stats(object):
 
     @staticmethod
     def connected_pathway_distribution(pathway_nodes, graph_map, size, num_of_sub, intersect=[]):
+        """ Generate the text file and png file to show the distribution of the edge number between the given pathway
+            and the random subgraphs
+        Args:
+            pathway_nodes (:obj: list): a list of nodes of the pathway
+            graph_map (:obj: Graph from networkx): the graph of the map
+            size (:obj: int): the size of the subgraph, it should larger than 1 and smaller or equal to the size of the graph
+            num_of_sub (:obj: int): the number of subgraphs randomly generated
+            intersect (:obj: list, optional): a list of nodes that intersects with the pathway
+        """
         print("Now we're checking the pathway nodes in the map...")
         pathway_nodes_clean = Dataclean.nodes_in_map(graph_map, pathway_nodes)
         nodes_in_map = list(graph_map.nodes())
@@ -395,6 +404,13 @@ class Stats(object):
 
     @staticmethod
     def max_connected_distribution(graph_map, size, num_of_sub):
+        """ Generate the text file and png file to show the distribution of the node number of the largest linked
+            subgraph from each of the random subgraphs
+        Args:
+            graph_map (:obj: Graph from networkx): the graph of the map
+            size (:obj: int): the size of the subgraph, it should larger than 1 and smaller or equal to the size of the graph
+            num_of_sub (:obj: int): the number of subgraphs randomly generated
+        """
         print('Generating random subnets with size {}...'.format(size))
         print('Finding the largest connected pattern in each of these subnets...')
         largest_size = []
