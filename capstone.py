@@ -282,6 +282,36 @@ class Parameter(object):
             return edge_between
 
     @staticmethod
+    def edge_cross_list(nodelist_1, nodelist_2, graph_map):
+        """ Return the edges number between two subnets formed by two node lists
+        Args:
+             nodelist_1 (:obj: list): a list of nodes
+             nodelist_2 (:obj: list): a list of nodes
+             graph_map (:obj: Graph from networkx): the undirected graph
+        Returns:
+            :obj:'set': a set of edge lists(tuples) between two subnets
+        """
+        total_nodes = nodelist_1 + nodelist_2
+        nodes_in_both = Parameter.subnets_intersecion(nodelist_1, nodelist_2)
+        if not nodes_in_both:
+            total_subnet = graph_map.subgraph(total_nodes)
+            subnet_nodelist_1 = graph_map.subgraph(nodelist_1)
+            subnet_nodelist_2 = graph_map.subgraph(nodelist_2)
+            edge_between_list = total_subnet.edges - subnet_nodelist_1.edges -\
+                           subnet_nodelist_2.edges
+            return edge_between_list
+        else:
+            nodes_only_in_list_1 = list(set(nodelist_1) - set(nodes_in_both))
+            nodes_only_in_list_2 = list(set(nodelist_2) - set(nodes_in_both))
+            a = Parameter.edge_cross_list(nodes_only_in_list_1, nodes_in_both, graph_map)
+            b = Parameter.edge_cross_list(nodes_only_in_list_2, nodes_in_both, graph_map)
+            c = Parameter.edge_cross_list(nodes_only_in_list_1, nodes_only_in_list_2, graph_map)
+            d = graph_map.subgraph(nodes_in_both).edges
+            edge_between_list = a.union(b).union(c).union(d)
+
+            return edge_between_list
+
+    @staticmethod
     def edge_cross_normalized(nodelist_1, nodelist_2, graph_map):
         """ Return the value normalized by number of nodes in nodelist_1
         Args:
@@ -289,7 +319,7 @@ class Parameter(object):
              nodelist_2 (:obj: list): a list of nodes
              graph_map (:obj: Graph from networkx): the undirected graph
         Returns:
-            :obj:'int': the edge numbers between two subnets
+            :obj:'float': the normalized edge numbers between two subnets
         """
         edge_between = Parameter.edge_cross(nodelist_1, nodelist_2, graph_map)
         edge_between_normalized = edge_between/float(len(nodelist_1))
