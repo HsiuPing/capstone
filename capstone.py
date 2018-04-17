@@ -7,6 +7,7 @@ import csv
 import random
 import numpy as np
 import math
+import mygene
 from matplotlib import pyplot as plt
 import pandas as pd
 from collections import Counter
@@ -50,18 +51,45 @@ class Dataclean(object):
         elif selfloop not in ['y', 'n']:
             raise ValueError("the selfloop should be 'y' or 'n'")
         else:
-            print("Now we're generating the whole biological network map...")
             if selfloop == 'y':
                 nx_map = nx.from_pandas_dataframe(dataset, interactor_a, interactor_b)
             elif selfloop == 'n':
                 nx_map = nx.from_pandas_dataframe(dataset, interactor_a, interactor_b)
                 nx_map.remove_edges_from(nx_map.selfloop_edges())
-            print("Your whole biological network map has {} nodes".format(Parameter.num_of_node(nx_map)),
+            print("Retrieve the protein-protein interaction network with {} nodes".format(Parameter.num_of_node(nx_map)),
                   "and {} edges.".format(Parameter.num_of_edge(nx_map)))
             return nx_map
 
     @staticmethod
-    def input_nodelist(filename):
+    def id_mapping(filename):
+        """ Map the gene id to the gene name from the pathway file from wikipathway
+        Args:
+            filename (:obj: str): the file path
+        Returns:
+            :obj:'list': a list of gene names        
+        """
+        df_id = pd.read_csv(filename, sep='\t', header=0, low_memory=False)
+        mg = mygene.MyGeneInfo()
+        gene_list = []
+        count = 0
+        gene_not_found = 0
+        print("Now we're mapping the gene list of the pathway.")
+        for index, row in df_id.iterrows():
+            gene_id = row['Identifier']
+            gene_name = mg.getgene(gene_id, fields='symbol')
+            if gene_name is not None:
+                gene_list.append(gene_name['symbol'])
+            else:
+                print('ID: ', gene_id, 'is not found.')
+                gene_not_found += 1
+            count += 1
+
+        print("There is/are", count, "gene(s) in this pathway.", gene_not_found,
+              "of them is/are not found when id mapping.")
+        return gene_list
+
+    @staticmethod
+    def input_nodelist(filename, printout=False):
         """ Read the file containing only nodes
         Args:
             filename (:obj: str): the file path
@@ -75,6 +103,8 @@ class Dataclean(object):
         try:
             with open(filename, 'r') as file:
                 datas = csv.reader(file, delimiter="\t")
+                if printout is True:
+                    print("Loading the file:", filename)
                 data = []
                 for row in datas:
                     data.append(row)
@@ -84,7 +114,31 @@ class Dataclean(object):
             raise ValueError('file loading error, or not found!')
 
     @staticmethod
-    def nodes_in_map(graph_map, nodelist):
+    def input_distribution(filename):
+        """ Read the file containing the distribution values
+                Args:
+                    filename (:obj: str): the file path
+
+                Returns:
+                    :obj:'list': a list of float representing the distribution
+                Raise:
+                    ValueError if the file is not successfully loaded        
+                """
+
+        try:
+            with open(filename, 'r') as file:
+                datas = csv.reader(file, delimiter="\t")
+                data = []
+                for row in datas:
+                    data.append(row)
+                data = [item for sublist in data for item in sublist]
+                data = [float(i) for i in data]
+            return data
+        except:
+            raise ValueError('file loading error, or not found!')
+
+    @staticmethod
+    def nodes_in_map(graph_map, nodelist, printout=False):
         """ Print out the nodes in the nodelist but not in the graph, and return the nodes in the nodelist
         Args:
             graph_map (:obj: Graph from networkx): the undirected graph
@@ -96,10 +150,12 @@ class Dataclean(object):
         map_nodes = list(graph_map.nodes())
         nodes_in_graph = [item for item in nodelist if item in map_nodes]
         nodes_not_in_graph = [item for item in nodelist if item not in map_nodes]
-        print(len(nodes_in_graph), 'node(s) in your node list is/are in the map.')
-        print(len(nodes_not_in_graph), 'node(s) is/are not in the map.')
+        if printout is True:
+            print(len(nodes_in_graph), 'genes in your gene set are in the PPI network.')
+            print(len(nodes_not_in_graph), 'genes are not in the PPI network.')
         if len(nodes_not_in_graph) != 0:
-            print('Following are the nodes not in the map:\n', nodes_not_in_graph)
+            if printout is True:
+                print('Following are the genes not in the PPI network:', nodes_not_in_graph)
 
         return nodes_in_graph
 
@@ -226,6 +282,20 @@ class Parameter(object):
             return edge_between
 
     @staticmethod
+    def edge_cross_normalized(nodelist_1, nodelist_2, graph_map):
+        """ Return the value normalized by number of nodes in nodelist_1
+        Args:
+             nodelist_1 (:obj: list): a list of nodes
+             nodelist_2 (:obj: list): a list of nodes
+             graph_map (:obj: Graph from networkx): the undirected graph
+        Returns:
+            :obj:'int': the edge numbers between two subnets
+        """
+        edge_between = Parameter.edge_cross(nodelist_1, nodelist_2, graph_map)
+        edge_between_normalized = edge_between/float(len(nodelist_1))
+        return edge_between_normalized
+
+    @staticmethod
     def jaccard_node_similarity(nodelist_1, nodelist_2, graph_map):
         total_nodes = nodelist_1 + nodelist_2
         nodes_no_duplicate = list(set(total_nodes))
@@ -261,7 +331,7 @@ class Stats(object):
 
     @staticmethod
     def connected_pathway_sig(pathway_nodes, subnet_nodes, graph_map, num_of_sub):
-        """ Give the information of how significant the supgraph connected with the pathway
+        """ Give the information of how significant the subgraph connected with the pathway
         Args:
             pathway_nodes (:obj: list): a list of nodes of the pathway
             subnet_nodes (:obj: list): a list of nodes you are interested in
@@ -315,52 +385,91 @@ class Stats(object):
                   'at least', edges_between, 'is {0:e}'.format(count/float(num_of_sub)))
 
     @staticmethod
-    def connected_pathway_distribution(pathway_nodes, graph_map, size, num_of_sub, intersect=[]):
+    def connected_pathway_distribution(pathway_nodes, graph_map, num_of_sub, size=None, pathway_name=None):
         """ Generate the text file and png file to show the distribution of the edge number between the given pathway
             and the random subgraphs
         Args:
             pathway_nodes (:obj: list): a list of nodes of the pathway
             graph_map (:obj: Graph from networkx): the graph of the map
-            size (:obj: int): the size of the subgraph, it should larger than 1 and smaller or equal to the size of the graph
             num_of_sub (:obj: int): the number of subgraphs randomly generated
-            intersect (:obj: list, optional): a list of nodes that intersects with the pathway
+            size (:obj: int or None, optional): the size of the subgraph, it should larger than 1 and smaller or equal
+                                                to the size of the graph. If it is None, subgraphs with size from 2 to 999
+                                                will be randomly generated.
+            pathway_name (:obj: str or None, optional): the name of your pathway
+            
         """
         print("Now we're checking the pathway nodes in the map...")
         pathway_nodes_clean = Dataclean.nodes_in_map(graph_map, pathway_nodes)
-        nodes_in_map = list(graph_map.nodes())
-        nodes_not_in_pathway = [item for item in nodes_in_map if item not in pathway_nodes_clean]
-        graph_for_random = graph_map.subgraph(nodes_not_in_pathway)
 
         edges_between = []
-        for i in range(num_of_sub):
-            random_subnet = Subnetwork.get_subgraph(graph_for_random, size)
-            random_subnet_nodes = list(random_subnet.nodes()) + intersect
-            random_subnet_edge_between = Parameter.edge_cross(random_subnet_nodes,
-                                                              pathway_nodes_clean, graph_map)
-            edges_between.append(random_subnet_edge_between)
 
-        edges_between = np.array(edges_between)
+        if size is None:
+            for i in range(num_of_sub):
+                size = random.choice(list(range(2, 1000)))
+                random_subnet = Subnetwork.get_subgraph(graph_map, size)
+                random_subnet_nodes = list(random_subnet.nodes())
+                random_subnet_edge_between = Parameter.edge_cross_normalized(random_subnet_nodes,
+                                                                             pathway_nodes_clean, graph_map)
 
-        filename = 'connected_pathway_distribution_' + str(size) + '_' + str(num_of_sub) + '.txt'
+                edges_between.append(random_subnet_edge_between)
+
+            edges_between = np.array(edges_between)
+
+            filename = 'connected_pathway_distribution_{}_random_size_'.format(pathway_name) + str(num_of_sub) + '.txt'
+
+        else:
+            for i in range(num_of_sub):
+                random_subnet = Subnetwork.get_subgraph(graph_map, size)
+                random_subnet_nodes = list(random_subnet.nodes())
+                random_subnet_edge_between = Parameter.edge_cross_normalized(random_subnet_nodes,
+                                                                             pathway_nodes_clean, graph_map)
+
+                edges_between.append(random_subnet_edge_between)
+
+            edges_between = np.array(edges_between)
+
+            filename = 'connected_pathway_distribution_{}_{}_'.format(pathway_name, size) + str(num_of_sub) + '.txt'
+
         text_file = open(filename, "w")
         for i in edges_between:
             text_file.write(str(i))
             text_file.write('\n')
         text_file.close()
 
-        weights = np.ones_like(edges_between) / float(len(edges_between))
+        return edges_between
 
-        plt.hist(edges_between, facecolor='g', weights=weights,
-                 bins=np.arange(min(edges_between), max(edges_between) + 1, 1))
-        plt.title('Histogram of The Edge Number between \n The Pathway and Random Subgraphs \n'
-                  '(Size: {}, '.format(size) + 'Number of Subgraphs: {})\n'.format(num_of_sub) +
-                  '(Intersection: {})'.format(intersect))
+    @staticmethod
+    def connected_pathway_distribution_figure(distribution, size='random', name=None):
+        # Get current size
+        fig_size = plt.rcParams["figure.figsize"]
 
-        plt.xlabel('Edge Number between The Pathway and Random Subgraphs')
-        plt.ylabel('Probability')
-        xint = range(int(min(edges_between) - 1), int(math.ceil(max(edges_between)) + 2))
+        # Set figure width to 12 and height to 9
+        fig_size[0] = 12
+        fig_size[1] = 9
+        plt.rcParams["figure.figsize"] = fig_size
+        plt.rcParams["patch.force_edgecolor"] = True
+
+        weights = np.ones_like(distribution) / float(len(distribution))
+
+        plt.hist(distribution, facecolor='g', weights=weights,
+                 bins=np.arange(min(distribution), math.ceil(max(distribution)) + 0.1, 0.025))
+        title = 'Histogram of The Normalized Edge Number between ' + str(name) + ' and Random Subgraphs \n' \
+                + 'Number of Subgraphs:' + str(len(distribution))
+        plt.title(title)
+
+        if math.ceil(max(distribution)) > 10:
+            xint = np.arange(min(distribution), math.ceil(max(distribution)) + 0.1, 0.5)
+        elif (math.ceil(max(distribution)) <= 10) and (math.ceil(max(distribution)) > 5):
+            xint = np.arange(min(distribution), math.ceil(max(distribution)) + 0.1, 0.2)
+        else:
+            xint = np.arange(min(distribution), math.ceil(max(distribution)) + 0.1, 0.1)
         plt.xticks(xint)
-        figname = 'connected_pathway_distribution_' + str(size) + '_' + str(num_of_sub) + '.png'
+
+        plt.xlabel('Edge Number between The Pathway and Random Subgraphs\n Normalized by size of each subgraph')
+        plt.ylabel('Probability')
+        plt.xticks(rotation=90)
+        figname = 'connected_pathway_distribution_' + str(name) + '_' + str(size) + '_' +\
+                  str(len(distribution)) + '.png'
         plt.savefig(figname)
         plt.close()
 
@@ -404,7 +513,7 @@ class Stats(object):
 
     @staticmethod
     def max_connected_distribution(graph_map, size, num_of_sub):
-        """ Generate the text file and png file to show the distribution of the node number of the largest linked
+        """ Generate the text file to show the distribution of the node number of the largest linked
             subgraph from each of the random subgraphs
         Args:
             graph_map (:obj: Graph from networkx): the graph of the map
@@ -428,20 +537,60 @@ class Stats(object):
             text_file.write(str(i))
             text_file.write('\n')
         text_file.close()
+        return largest_size
 
-        weights = np.ones_like(largest_size) / float(len(largest_size))
+    @staticmethod
+    def max_connected_distribution_figure(distribution, size, value=None):
+        # Get current size
+        fig_size = plt.rcParams["figure.figsize"]
 
-        plt.hist(largest_size, facecolor='g', weights=weights,
-                 bins=np.arange(min(largest_size), max(largest_size) + 1, 1))
+        # Set figure width to 12 and height to 9
+        fig_size[0] = 18
+        fig_size[1] = 9
+        plt.rcParams["figure.figsize"] = fig_size
+        plt.rcParams["patch.force_edgecolor"] = True
+        if value is not None:
+            distribution_with_value = distribution + [value]
+        else:
+            distribution_with_value = distribution
+
+        weights = np.ones_like(distribution) / float(len(distribution))
+
+        plt.hist(distribution, facecolor='g', weights=weights,
+                 bins=np.arange(min(distribution), max(distribution) + 1, 1))
+        if value is not None:
+            plt.axvline(value, color='r', linestyle='dashed', linewidth=3)
+
         plt.title('Histogram of The Node Number of The Largest Connected Subgraphs \n'
-                  '(Size: {}, '.format(size) + 'Number of Subgraphs: {})'.format(num_of_sub))
-        plt.xlabel('Node Number of The Largest Connected Subgraphs')
-        plt.ylabel('Probability')
-        xint = range(int(min(largest_size) - 1), int(math.ceil(max(largest_size)) + 2))
-        plt.xticks(xint)
-        figname = 'max_connected_distribution_' + str(size) + '_' + str(num_of_sub) + '.png'
+                  '(Size: {}, '.format(size) + 'Number of Subgraphs: {})'.format(len(distribution)), fontsize=28)
+        plt.xlabel('Node Number of The Largest Connected Subgraphs', fontsize=26)
+        plt.ylabel('Probability', fontsize=26)
+        xint = range(int(min(distribution_with_value) - 1), int(math.ceil(max(distribution_with_value)) + 2))
+        plt.xticks(xint, fontsize=12)
+        plt.yticks(fontsize=16)
+        plt.xticks(rotation=90)
+        figname = 'max_connected_distribution_' + str(size) + '_' + str(len(distribution)) + '.png'
         plt.savefig(figname)
         plt.close()
+
+    @staticmethod
+    def p_in_distribution(value, distribution):
+        count = 0
+        for i in distribution:
+            if i >= value:
+                count += 1
+
+        print('{} of'.format(count), len(distribution), 'random subnets have the value '
+              'larger than your graph.')
+        if count == 0:
+            print('Probability that chance alone gave us that larger or equal to your value', value,
+                  'in this distribution is smaller than',
+                  '{0:e}'.format(1/float(len(distribution))))
+            return 0
+        else:
+            print('Probability that chance alone gave us that larger or equal to your value', value,
+                  'in this distribution is {0:e}'.format(count/float(len(distribution))))
+            return count/float(len(distribution))
 
     @staticmethod
     def diff_size_max_connected_sig(graph, graph_map, size, num_of_sub, num_shuffle):
